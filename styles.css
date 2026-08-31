@@ -1,0 +1,25 @@
+*{box-sizing:border-box}
+body{margin:0;background:#f3f4f6;color:#111827;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.topbar{background:#111827;color:#fff;padding:15px 18px;display:flex;justify-content:space-between;align-items:center}
+.topbar small{display:block;color:#9ca3af;font-size:12px}
+.container{max-width:900px;margin:22px auto;padding:0 15px}
+.card{background:#fff;border-radius:16px;padding:20px;margin-bottom:18px;box-shadow:0 4px 18px #00000012}
+h1{margin:0 0 8px}h2{margin-top:0}
+p{color:#6b7280;line-height:1.5}
+label{display:block;font-weight:700;margin:18px 0 7px}
+input{width:100%;padding:13px;border:1px solid #d1d5db;border-radius:10px;font-size:16px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+button{border:0;border-radius:10px;padding:13px 16px;font-weight:700;font-size:15px;cursor:pointer}
+.primary{background:#111827;color:#fff}.danger{background:#b91c1c;color:#fff}.ghost{background:#e5e7eb;color:#111827}
+.status{margin-top:14px;padding:12px;border-radius:10px;background:#f3f4f6}
+.status.ok{background:#dcfce7;color:#166534}.status.error{background:#fee2e2;color:#991b1b}
+video,img{display:block;width:100%;max-width:360px;border-radius:12px;margin:12px auto 0}
+.heading{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}
+.stat{background:#f9fafb;padding:14px;border-radius:12px}.stat b{display:block;font-size:25px}
+.tools{display:flex;gap:10px;margin:15px 0}.tools input{max-width:220px}
+.tableWrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:10px;border-bottom:1px solid #e5e7eb;white-space:nowrap}
+.modal{position:fixed;inset:0;background:#0008;display:grid;place-items:center;padding:20px}
+.modalBox{background:#fff;border-radius:16px;padding:22px;width:min(420px,100%)}
+@media(max-width:600px){.actions,.stats{grid-template-columns:1fr}.heading{align-items:flex-start}.tools{display:grid}.tools input{max-width:none}}

@@ -7,67 +7,101 @@
 <title>MASABA WiFi Attendance</title>
 <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
+
 <header class="topbar">
-  <div><strong>MASABA WiFi</strong><small>Employee Attendance</small></div>
-  <button id="adminBtn" class="ghost">Admin</button>
+  <div>
+    <strong>MASABA WiFi</strong>
+    <small>Employee Attendance</small>
+  </div>
+  <button id="adminBtn" class="ghost">Admin Login</button>
 </header>
 
 <main class="container">
-<section id="employeeView">
-<div class="card">
-<h1>Employee Attendance</h1>
-<p>Sign in and sign out using your phone. Your GPS location and attendance photo are recorded.</p>
 
-<label for="employeeName">Employee name</label>
-<input id="employeeName" placeholder="Enter your full name" autocomplete="name">
+<section id="authView" class="card">
+  <h1>MASABA WiFi</h1>
+  <p>Employee Attendance System</p>
 
-<div class="actions">
-<button id="signInBtn" class="primary">📍 Sign In</button>
-<button id="signOutBtn" class="danger">🔴 Sign Out</button>
-</div>
+  <label>Email</label>
+  <input id="loginEmail" type="email" placeholder="Enter your email">
 
-<div id="status" class="status">Ready.</div>
-<video id="video" autoplay playsinline hidden></video>
-<canvas id="canvas" hidden></canvas>
-<img id="preview" alt="Attendance photo" hidden>
-</div>
+  <label>Password</label>
+  <input id="loginPassword" type="password" placeholder="Enter your password">
 
-<div class="card">
-<h2>My Attendance History</h2>
-<div id="myHistory"><p>Enter your name to see records.</p></div>
-</div>
+  <button id="loginBtn" class="primary">Login</button>
+
+  <div id="loginStatus" class="status">Please login.</div>
 </section>
+
+
+<section id="employeeView" hidden>
+
+<div class="card">
+  <div class="heading">
+    <div>
+      <h1>Employee Attendance</h1>
+      <p id="welcomeText"></p>
+    </div>
+    <button id="logoutBtn" class="ghost">Logout</button>
+  </div>
+
+  <label>Employee Code</label>
+  <input id="employeeCode" placeholder="Example: EMP001">
+
+  <div class="actions">
+    <button id="signInBtn" class="primary">📍 Sign In</button>
+    <button id="signOutBtn" class="danger">🔴 Sign Out</button>
+  </div>
+
+  <div id="status" class="status">Ready.</div>
+
+  <video id="video" autoplay playsinline hidden></video>
+  <canvas id="canvas" hidden></canvas>
+  <img id="preview" alt="Attendance photo" hidden>
+</div>
+
+<div class="card">
+  <h2>My Attendance History</h2>
+  <div id="myHistory">
+    <p>No attendance records yet.</p>
+  </div>
+</div>
+
+</section>
+
 
 <section id="adminView" hidden>
+
 <div class="card">
+
 <div class="heading">
-<div><h1>Admin Dashboard</h1><p>Attendance records stored on this device.</p></div>
-<button id="backBtn" class="ghost">Back</button>
+  <div>
+    <h1>Admin Dashboard</h1>
+    <p>MASABA WiFi attendance records</p>
+  </div>
+
+  <button id="adminLogoutBtn" class="ghost">Logout</button>
 </div>
+
 <div id="stats" class="stats"></div>
+
 <div class="tools">
-<input id="filterDate" type="date">
-<button id="exportBtn" class="primary">Export CSV</button>
-<button id="clearBtn" class="danger">Clear Records</button>
+  <input id="filterDate" type="date">
+  <button id="exportBtn" class="primary">Export CSV</button>
 </div>
+
 <div id="adminTable"></div>
+
 </div>
+
 </section>
+
 </main>
 
-<div id="adminModal" class="modal" hidden>
-<div class="modalBox">
-<h2>Admin Login</h2>
-<p>Demo PIN: <b>1234</b></p>
-<input id="adminPin" type="password" inputmode="numeric" placeholder="Enter PIN">
-<div class="actions">
-<button id="cancelAdmin" class="ghost">Cancel</button>
-<button id="loginAdmin" class="primary">Open Dashboard</button>
-</div>
-</div>
-</div>
-
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js"></script>
+
 </body>
 </html>

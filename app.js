@@ -40,54 +40,30 @@ function getGPS() {
 
     navigator.geolocation.getCurrentPosition(
       position => {
-
         resolve({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
           accuracy: Math.round(position.coords.accuracy)
         });
-
       },
 
-      () => {
-        reject(
-          new Error("Please allow GPS/location permission.")
-        );
+      error => {
+        if (error.code === 1) {
+          reject(new Error("Please allow location permission."));
+        } else if (error.code === 2) {
+          reject(new Error("Unable to determine your location."));
+        } else {
+          reject(new Error("GPS request timed out. Try again."));
+        }
       },
 
       {
         enableHighAccuracy: true,
-        timeout: 15000,
+        timeout: 20000,
         maximumAge: 0
       }
     );
   });
-}
-
-
-/* =========================
-   DISTANCE CALCULATION
-========================= */
-
-function distanceMeters(lat1, lon1, lat2, lon2) {
-
-  const R = 6371000;
-
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) *
-    Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) ** 2;
-
-  const c = 2 * Math.atan2(
-    Math.sqrt(a),
-    Math.sqrt(1 - a)
-  );
-
-  return R * c;
 }
 
 
@@ -101,8 +77,7 @@ async function takePhoto() {
 
     if (!navigator.mediaDevices ||
         !navigator.mediaDevices.getUserMedia) {
-
-      throw new Error("Camera is not supported by this browser.");
+      throw new Error("Camera is not supported.");
     }
 
     stream = await navigator.mediaDevices.getUserMedia({
@@ -152,9 +127,7 @@ async function takePhoto() {
       stream = null;
     }
 
-    throw new Error(
-      "Please allow camera permission."
-    );
+    throw new Error("Please allow camera permission.");
   }
 }
 
@@ -164,6 +137,10 @@ async function takePhoto() {
 ========================= */
 
 async function uploadPhoto(blob, type) {
+
+  if (!currentUser) {
+    throw new Error("You are not logged in.");
+  }
 
   const fileName =
     `${currentUser.id}/${Date.now()}-${type}.jpg`;
@@ -176,9 +153,7 @@ async function uploadPhoto(blob, type) {
     });
 
   if (error) {
-    throw new Error(
-      "Photo upload failed: " + error.message
-    );
+    throw new Error("Photo upload failed: " + error.message);
   }
 
   return fileName;
@@ -186,7 +161,7 @@ async function uploadPhoto(blob, type) {
 
 
 /* =========================
-   GET WORK LOCATION
+   WORK LOCATION
 ========================= */
 
 async function getWorkLocation() {
@@ -194,20 +169,18 @@ async function getWorkLocation() {
   const { data, error } = await db
     .from("work_locations")
     .select("*")
+    .eq("id", "a305302f-a919-44a8-9867-6a8d725c5c9b")
     .eq("status", "active")
-    .limit(1)
     .maybeSingle();
 
   if (error) {
     throw new Error(
-      "Could not load work location: " + error.message
+      "Could not load workplace: " + error.message
     );
   }
 
   if (!data) {
-    throw new Error(
-      "No active work location has been created by the admin."
-    );
+    throw new Error("Masaba Investment workplace not found.");
   }
 
   return data;
@@ -215,29 +188,37 @@ async function getWorkLocation() {
 
 
 /* =========================
-   CHECK GPS
+   GPS VERIFICATION
 ========================= */
 
 async function verifyLocation(gps) {
 
   const location = await getWorkLocation();
 
-  const distance = distanceMeters(
-    gps.lat,
-    gps.lng,
-    Number(location.latitude),
-    Number(location.longitude)
+  const { data, error } = await db.rpc(
+    "check_workplace_location",
+    {
+      p_latitude: gps.lat,
+      p_longitude: gps.lng,
+      p_location_id: location.id
+    }
   );
 
-  const allowed =
-    Number(location.allowed_radius_meters || 100);
+  if (error) {
+    throw new Error(
+      "GPS verification failed: " + error.message
+    );
+  }
 
-  if (distance > allowed) {
+  if (!data) {
+
+    const distanceText =
+      location.allowed_radius_meters
+        ? `within ${location.allowed_radius_meters} metres`
+        : "within the allowed area";
 
     throw new Error(
-      `You are outside the work area. ` +
-      `Distance: ${Math.round(distance)}m. ` +
-      `Allowed: ${allowed}m.`
+      `You are outside Masaba Investment. You must be ${distanceText}.`
     );
   }
 
@@ -251,16 +232,14 @@ async function verifyLocation(gps) {
 
 async function findEmployee() {
 
-  const code = $("employeeCode").value.trim();
-
-  if (!code) {
-    throw new Error("Enter your employee code.");
+  if (!currentUser) {
+    throw new Error("Please login first.");
   }
 
   const { data, error } = await db
     .from("employees")
     .select("*")
-    .eq("employee_code", code)
+    .eq("user_id", currentUser.id)
     .eq("status", "active")
     .maybeSingle();
 
@@ -272,18 +251,14 @@ async function findEmployee() {
 
   if (!data) {
     throw new Error(
-      "Employee code not found."
-    );
-  }
-
-  if (data.user_id !== currentUser.id) {
-
-    throw new Error(
-      "This employee code is not linked to your account."
+      "Your account is not linked to an active employee."
     );
   }
 
   currentEmployee = data;
+
+  $("employeeCode").value = data.employee_code;
+  $("employeeCode").disabled = true;
 
   return data;
 }
@@ -295,7 +270,8 @@ async function findEmployee() {
 
 async function signIn() {
 
-  status("Checking employee and GPS...");
+  $("signInBtn").disabled = true;
+  status("Checking your GPS...");
 
   try {
 
@@ -303,9 +279,15 @@ async function signIn() {
 
     const gps = await getGPS();
 
+    status(
+      `GPS found. Accuracy: ${gps.accuracy}m. Checking workplace...`
+    );
+
     const location = await verifyLocation(gps);
 
-    status("Location verified. Opening camera...");
+    status(
+      "Location verified. Opening camera..."
+    );
 
     const photo = await takePhoto();
 
@@ -314,55 +296,44 @@ async function signIn() {
     const photoPath =
       await uploadPhoto(photo, "clock-in");
 
-    const { data: attendance, error } = await db
-      .from("attendance")
-      .insert({
-        employee_id: employee.id,
-        work_location_id: location.id,
-        clock_in: new Date().toISOString(),
-        clock_in_latitude: gps.lat,
-        clock_in_longitude: gps.lng,
-        clock_in_photo_url: photoPath,
-        status: "present"
-      })
-      .select()
-      .single();
+    status("Recording your sign in...");
+
+    const { data: attendanceId, error } =
+      await db.rpc(
+        "clock_in_employee",
+        {
+          p_employee_id: employee.id,
+          p_latitude: gps.lat,
+          p_longitude: gps.lng,
+          p_photo_url: photoPath
+        }
+      );
 
     if (error) {
+
+      await db.storage
+        .from("attendance-photos")
+        .remove([photoPath]);
+
       throw new Error(
         "Sign in failed: " + error.message
       );
     }
 
-    await db
-      .from("attendance_locations")
-      .insert({
-        attendance_id: attendance.id,
-        employee_id: employee.id,
-        latitude: gps.lat,
-        longitude: gps.lng,
-        accuracy_meters: gps.accuracy
-      });
-
-    await db
-      .from("attendance_photos")
-      .insert({
-        attendance_id: attendance.id,
-        employee_id: employee.id,
-        photo_url: photoPath,
-        photo_type: "clock_in"
-      });
-
     status(
-      "Sign in successful at " +
+      "✅ Sign in successful at " +
       new Date().toLocaleTimeString()
     );
 
-    loadMyHistory();
+    await loadMyHistory();
 
   } catch (error) {
 
     status(error.message, false);
+
+  } finally {
+
+    $("signInBtn").disabled = false;
   }
 }
 
@@ -373,38 +344,20 @@ async function signIn() {
 
 async function signOut() {
 
-  status("Checking your attendance...");
+  $("signOutBtn").disabled = true;
+  status("Checking your GPS...");
 
   try {
 
     const employee = await findEmployee();
 
-    const { data: openAttendance, error } = await db
-      .from("attendance")
-      .select("*")
-      .eq("employee_id", employee.id)
-      .is("clock_out", null)
-      .order("clock_in", {
-        ascending: false
-      })
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      throw new Error(
-        "Could not find attendance: " + error.message
-      );
-    }
-
-    if (!openAttendance) {
-      throw new Error(
-        "No open sign-in was found."
-      );
-    }
-
     const gps = await getGPS();
 
-    const location = await verifyLocation(gps);
+    status(
+      `GPS found. Accuracy: ${gps.accuracy}m. Checking workplace...`
+    );
+
+    await verifyLocation(gps);
 
     status("Location verified. Opening camera...");
 
@@ -415,64 +368,44 @@ async function signOut() {
     const photoPath =
       await uploadPhoto(photo, "clock-out");
 
-    const clockOut =
-      new Date();
+    status("Recording your sign out...");
 
-    const clockIn =
-      new Date(openAttendance.clock_in);
-
-    const totalMinutes =
-      Math.round(
-        (clockOut - clockIn) / 60000
+    const { data: attendanceId, error } =
+      await db.rpc(
+        "clock_out_employee",
+        {
+          p_employee_id: employee.id,
+          p_latitude: gps.lat,
+          p_longitude: gps.lng,
+          p_photo_url: photoPath
+        }
       );
 
-    const { error: updateError } = await db
-      .from("attendance")
-      .update({
-        clock_out: clockOut.toISOString(),
-        clock_out_latitude: gps.lat,
-        clock_out_longitude: gps.lng,
-        clock_out_photo_url: photoPath,
-        total_minutes: totalMinutes,
-        status: "completed"
-      })
-      .eq("id", openAttendance.id);
+    if (error) {
 
-    if (updateError) {
+      await db.storage
+        .from("attendance-photos")
+        .remove([photoPath]);
+
       throw new Error(
-        "Sign out failed: " +
-        updateError.message
+        "Sign out failed: " + error.message
       );
     }
 
-    await db
-      .from("attendance_locations")
-      .insert({
-        attendance_id: openAttendance.id,
-        employee_id: employee.id,
-        latitude: gps.lat,
-        longitude: gps.lng,
-        accuracy_meters: gps.accuracy
-      });
-
-    await db
-      .from("attendance_photos")
-      .insert({
-        attendance_id: openAttendance.id,
-        employee_id: employee.id,
-        photo_url: photoPath,
-        photo_type: "clock_out"
-      });
-
     status(
-      `Sign out successful. Worked ${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`
+      "✅ Sign out successful at " +
+      new Date().toLocaleTimeString()
     );
 
-    loadMyHistory();
+    await loadMyHistory();
 
   } catch (error) {
 
     status(error.message, false);
+
+  } finally {
+
+    $("signOutBtn").disabled = false;
   }
 }
 
@@ -487,7 +420,12 @@ async function loadMyHistory() {
 
   const { data, error } = await db
     .from("attendance")
-    .select("*")
+    .select(`
+      *,
+      work_locations (
+        name
+      )
+    `)
     .eq("employee_id", currentEmployee.id)
     .order("clock_in", {
       ascending: false
@@ -512,11 +450,13 @@ async function loadMyHistory() {
   $("myHistory").innerHTML = `
     <div class="tableWrap">
       <table>
+
         <tr>
           <th>Date</th>
           <th>Sign In</th>
           <th>Sign Out</th>
           <th>Hours</th>
+          <th>Status</th>
         </tr>
 
         ${data.map(row => {
@@ -533,6 +473,7 @@ async function loadMyHistory() {
 
           return `
             <tr>
+
               <td>
                 ${new Date(row.clock_in).toLocaleDateString()}
               </td>
@@ -544,12 +485,15 @@ async function loadMyHistory() {
               <td>
                 ${
                   row.clock_out
-                  ? new Date(row.clock_out).toLocaleTimeString()
-                  : "—"
+                    ? new Date(row.clock_out).toLocaleTimeString()
+                    : "—"
                 }
               </td>
 
               <td>${hours}</td>
+
+              <td>${row.status}</td>
+
             </tr>
           `;
 
@@ -567,8 +511,7 @@ async function loadMyHistory() {
 
 async function loadAdminDashboard() {
 
-  const date =
-    $("filterDate").value;
+  const date = $("filterDate").value;
 
   let query = db
     .from("attendance")
@@ -590,8 +533,7 @@ async function loadAdminDashboard() {
       .lt("clock_in", `${date}T23:59:59`);
   }
 
-  const { data, error } =
-    await query;
+  const { data, error } = await query;
 
   if (error) {
 
@@ -680,8 +622,8 @@ async function loadAdminDashboard() {
               <td>
                 ${
                   row.clock_out
-                  ? new Date(row.clock_out).toLocaleString()
-                  : "—"
+                    ? new Date(row.clock_out).toLocaleString()
+                    : "—"
                 }
               </td>
 
@@ -788,7 +730,7 @@ async function exportCSV() {
 
 
 /* =========================
-   AUTHENTICATION
+   LOGIN
 ========================= */
 
 async function login() {
@@ -850,15 +792,14 @@ async function loadUserProfile() {
   if (error) {
 
     loginStatus(
-      "Could not load profile.",
+      "Could not load profile: " + error.message,
       false
     );
 
     return;
   }
 
-  currentProfile =
-    data;
+  currentProfile = data;
 
   if (!currentProfile) {
 
@@ -885,10 +826,9 @@ async function loadUserProfile() {
     $("employeeView").hidden = false;
 
     $("welcomeText").textContent =
-      `Welcome, ${currentProfile.full_name}`;
+      `Welcome, ${currentProfile.full_name || "Employee"}`;
 
     await loadEmployee();
-
   }
 }
 
@@ -899,42 +839,17 @@ async function loadUserProfile() {
 
 async function loadEmployee() {
 
-  const { data, error } =
-    await db
-      .from("employees")
-      .select("*")
-      .eq("user_id", currentUser.id)
-      .maybeSingle();
+  try {
 
-  if (error) {
+    await findEmployee();
 
-    status(
-      "Could not load employee record.",
-      false
-    );
-
-    return;
-  }
-
-  currentEmployee =
-    data;
-
-  if (currentEmployee) {
-
-    $("employeeCode").value =
-      currentEmployee.employee_code;
-
-    $("employeeCode").disabled =
-      true;
+    status("Ready to sign in.");
 
     await loadMyHistory();
 
-  } else {
+  } catch (error) {
 
-    status(
-      "Your account is not linked to an employee record.",
-      false
-    );
+    status(error.message, false);
   }
 }
 
@@ -965,26 +880,13 @@ async function logout() {
    BUTTONS
 ========================= */
 
-$("loginBtn").onclick =
-  login;
-
-$("logoutBtn").onclick =
-  logout;
-
-$("adminLogoutBtn").onclick =
-  logout;
-
-$("signInBtn").onclick =
-  signIn;
-
-$("signOutBtn").onclick =
-  signOut;
-
-$("filterDate").onchange =
-  loadAdminDashboard;
-
-$("exportBtn").onclick =
-  exportCSV;
+$("loginBtn").onclick = login;
+$("logoutBtn").onclick = logout;
+$("adminLogoutBtn").onclick = logout;
+$("signInBtn").onclick = signIn;
+$("signOutBtn").onclick = signOut;
+$("filterDate").onchange = loadAdminDashboard;
+$("exportBtn").onclick = exportCSV;
 
 
 /* =========================
@@ -1001,8 +903,7 @@ async function startApp() {
 
   if (session?.user) {
 
-    currentUser =
-      session.user;
+    currentUser = session.user;
 
     await loadUserProfile();
 
